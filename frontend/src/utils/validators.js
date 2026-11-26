@@ -35,6 +35,42 @@ export function validateLogin({ email, password }) {
   return errors;
 }
 
+export function validateProfile({ fullName, phoneNumber }) {
+  const errors = {};
+  if (!fullName.trim()) errors.fullName = 'Full name is required.';
+  else if (fullName.trim().length < 2) errors.fullName = 'Full name must be at least 2 characters.';
+  else if (fullName.trim().length > 100) errors.fullName = 'Full name must be at most 100 characters.';
+
+  if (!phoneNumber.trim()) errors.phoneNumber = 'Phone number is required.';
+  else if (!PHONE_RE.test(phoneNumber.trim()))
+    errors.phoneNumber = 'Enter a valid PH mobile number (e.g. 09123456789).';
+  return errors;
+}
+
+export function validateChangePassword({ currentPassword, newPassword, confirmPassword }) {
+  const errors = {};
+  if (!currentPassword) errors.currentPassword = 'Current password is required.';
+
+  if (!newPassword) errors.newPassword = 'New password is required.';
+  else if (!PASSWORD_RE.test(newPassword)) errors.newPassword = PASSWORD_HINT;
+  else if (newPassword === currentPassword)
+    errors.newPassword = 'New password must be different from your current password.';
+
+  if (!confirmPassword) errors.confirmPassword = 'Please confirm your new password.';
+  else if (newPassword !== confirmPassword) errors.confirmPassword = 'Passwords do not match.';
+  return errors;
+}
+
+export function validateResetPassword({ newPassword, confirmPassword }) {
+  const errors = {};
+  if (!newPassword) errors.newPassword = 'New password is required.';
+  else if (!PASSWORD_RE.test(newPassword)) errors.newPassword = PASSWORD_HINT;
+
+  if (!confirmPassword) errors.confirmPassword = 'Please confirm your new password.';
+  else if (newPassword !== confirmPassword) errors.confirmPassword = 'Passwords do not match.';
+  return errors;
+}
+
 /** Turns Firebase Auth error codes into friendly messages. */
 export function friendlyAuthError(error) {
   switch (error?.code) {
@@ -49,6 +85,12 @@ export function friendlyAuthError(error) {
       return 'Too many failed attempts. Please wait a few minutes and try again.';
     case 'auth/network-request-failed':
       return 'Network error. Check your internet connection.';
+    case 'auth/expired-action-code':
+      return 'This reset link has expired. Please request a new one.';
+    case 'auth/invalid-action-code':
+      return 'This reset link is invalid or has already been used. Please request a new one.';
+    case 'auth/weak-password':
+      return 'That password is too weak. ' + PASSWORD_HINT;
     default:
       return error?.message || 'Something went wrong. Please try again.';
   }

@@ -55,6 +55,9 @@ export const registerPatient = (payload) =>
 
 // --- authenticated
 export const fetchMe = () => request('/api/users/me');
+export const updateProfile = (payload) => request('/api/users/me', { method: 'PATCH', body: payload });
+export const changePassword = (payload) =>
+  request('/api/users/me/password', { method: 'POST', body: payload });
 export const serverLogout = () => request('/api/auth/logout', { method: 'POST' });
 
 // --- staff only (the backend enforces this; the UI merely hides it)

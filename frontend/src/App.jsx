@@ -6,6 +6,10 @@ import DashboardLayout from './layouts/DashboardLayout';
 import FullPageSpinner from './components/FullPageSpinner';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
+import Profile from './pages/Profile';
+import ChangePassword from './pages/ChangePassword';
 import PatientDashboard from './pages/PatientDashboard';
 import DoctorDashboard from './pages/DoctorDashboard';
 import StaffDashboard from './pages/StaffDashboard';
@@ -28,6 +32,18 @@ export default function App() {
       <Route element={<PublicOnlyRoute />}>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+      </Route>
+
+      {/* The reset link from the email must work whether or not someone is signed in. */}
+      <Route path="/reset-password" element={<ResetPassword />} />
+
+      {/* Any signed-in user, regardless of role */}
+      <Route element={<ProtectedRoute />}>
+        <Route element={<DashboardLayout />}>
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/change-password" element={<ChangePassword />} />
+        </Route>
       </Route>
 
       <Route element={<ProtectedRoute allowedRoles={[ROLES.PATIENT]} />}>
