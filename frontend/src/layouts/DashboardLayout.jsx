@@ -27,11 +27,17 @@ const NAV = {
   ],
 };
 
+// Account links shown to every role (Increment 2).
+const COMMON_NAV = [
+  { to: '/profile', label: 'My Profile' },
+  { to: '/change-password', label: 'Change Password' },
+];
+
 export default function DashboardLayout() {
   const { profile, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
-  const items = NAV[profile.role] || [];
+  const items = [...(NAV[profile.role] || []), ...COMMON_NAV];
 
   const handleLogout = async () => {
     setSigningOut(true);

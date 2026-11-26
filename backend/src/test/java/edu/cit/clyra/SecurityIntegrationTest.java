@@ -24,6 +24,7 @@ import java.util.Optional;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -255,5 +256,93 @@ class SecurityIntegrationTest {
     void unknownApiPath_isNotOpen() throws Exception {
         mvc.perform(get("/api/does-not-exist")).andExpect(status().isUnauthorized());
         mvc.perform(get("/not-api")).andExpect(status().isUnauthorized());
+    }
+
+    // ------------------------------------------------------------ Increment 2: profile + change password
+
+    @Test
+    void updateProfile_requiresAuthentication() throws Exception {
+        mvc.perform(patch("/api/users/me").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"fullName\":\"Juan\",\"phoneNumber\":\"09123456789\"}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void updateProfile_alwaysTargetsTheCallerAndIgnoresUidAndRole() throws Exception {
+        UserProfile updated = new UserProfile("patient-uid", "Juan Dela Cruz", "patient-uid@example.com", "09999999999",
+                Role.PATIENT, true, Instant.now(), Instant.now());
+        when(userService.updateProfile("patient-uid", "Juan Dela Cruz", "09999999999")).thenReturn(updated);
+
+        String body = """
+                {"fullName":"Juan Dela Cruz","phoneNumber":"09999999999","uid":"someone-else","role":"STAFF"}""";
+        mvc.perform(patch("/api/users/me").header("Authorization", bearer("patient-token"))
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.uid").value("patient-uid"))
+                .andExpect(jsonPath("$.role").value("PATIENT"));
+        verify(userService).updateProfile("patient-uid", "Juan Dela Cruz", "09999999999");
+        verify(userService, never()).updateProfile(eq("someone-else"), anyString(), anyString());
+    }
+
+    @Test
+    void updateProfile_rejectsInvalidInput() throws Exception {
+        mvc.perform(patch("/api/users/me").header("Authorization", bearer("patient-token"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"fullName\":\"\",\"phoneNumber\":\"123\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors.fullName").exists())
+                .andExpect(jsonPath("$.fieldErrors.phoneNumber").exists());
+        verify(userService, never()).updateProfile(anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void changePassword_requiresAuthentication() throws Exception {
+        mvc.perform(post("/api/users/me/password").contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void changePassword_succeedsWith204() throws Exception {
+        String body = """
+                {"currentPassword":"Old!Pass1","newPassword":"New!Pass2x","confirmPassword":"New!Pass2x"}""";
+        mvc.perform(post("/api/users/me/password").header("Authorization", bearer("patient-token"))
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isNoContent());
+        verify(userService).changePassword("patient-uid", "Old!Pass1", "New!Pass2x");
+    }
+
+    @Test
+    void changePassword_rejectsWeakMismatchedAndMissingInput() throws Exception {
+        String weak = """
+                {"currentPassword":"Old!Pass1","newPassword":"weak","confirmPassword":"weak"}""";
+        mvc.perform(post("/api/users/me/password").header("Authorization", bearer("patient-token"))
+                        .contentType(MediaType.APPLICATION_JSON).content(weak))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors.newPassword").exists());
+
+        String mismatch = """
+                {"currentPassword":"Old!Pass1","newPassword":"New!Pass2x","confirmPassword":"Different!1"}""";
+        mvc.perform(post("/api/users/me/password").header("Authorization", bearer("patient-token"))
+                        .contentType(MediaType.APPLICATION_JSON).content(mismatch))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors.passwordConfirmed").exists());
+
+        mvc.perform(post("/api/users/me/password").header("Authorization", bearer("patient-token"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors.currentPassword").exists());
+        verify(userService, never()).changePassword(anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void changePassword_wrongCurrentPasswordIs400() throws Exception {
+        doThrow(new edu.cit.clyra.exception.ApiException(
+                org.springframework.http.HttpStatus.BAD_REQUEST, "Current password is incorrect."))
+                .when(userService).changePassword("patient-uid", "Wrong!Pass1", "New!Pass2x");
+        String body = """
+                {"currentPassword":"Wrong!Pass1","newPassword":"New!Pass2x","confirmPassword":"New!Pass2x"}""";
+        mvc.perform(post("/api/users/me/password").header("Authorization", bearer("patient-token"))
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Current password is incorrect."));
     }
 }

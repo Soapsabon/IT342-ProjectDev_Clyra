@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import Logo from '../components/Logo';
 import Field from '../components/Field';
@@ -10,6 +10,8 @@ import { friendlyAuthError, validateLogin } from '../utils/validators';
 
 export default function Login() {
   const { login, loading, authError } = useAuth();
+  const location = useLocation();
+  const notice = location.state?.message || '';
   const [form, setForm] = useState({ email: '', password: '' });
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState('');
@@ -45,6 +47,7 @@ export default function Login() {
         {!firebaseConfigured && (
           <Alert>Firebase is not configured. Copy frontend/.env.example to frontend/.env and fill it in.</Alert>
         )}
+        <Alert type="success">{notice}</Alert>
         <Alert>{formError || authError}</Alert>
 
         <form onSubmit={handleSubmit} noValidate>
@@ -61,6 +64,9 @@ export default function Login() {
               autoComplete="current-password" disabled={busy} invalid={!!errors.password}
             />
           </Field>
+          <p className="auth-switch" style={{ textAlign: 'right', margin: '-.25rem 0 1rem' }}>
+            <Link to="/forgot-password">Forgot password?</Link>
+          </p>
           <button className="btn btn-primary btn-block" type="submit" disabled={busy}>
             {busy ? (<><span className="spinner spinner-sm" /> Signing in…</>) : 'Sign in'}
           </button>

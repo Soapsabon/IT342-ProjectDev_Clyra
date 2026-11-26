@@ -39,10 +39,12 @@ public class UserService {
 
     private final Firestore firestore;
     private final FirebaseAuth firebaseAuth;
+    private final FirebasePasswordVerifier passwordVerifier;
 
-    public UserService(Firestore firestore, FirebaseAuth firebaseAuth) {
+    public UserService(Firestore firestore, FirebaseAuth firebaseAuth, FirebasePasswordVerifier passwordVerifier) {
         this.firestore = firestore;
         this.firebaseAuth = firebaseAuth;
+        this.passwordVerifier = passwordVerifier;
     }
 
     // ---------------------------------------------------------------- reads
@@ -158,6 +160,55 @@ public class UserService {
             firebaseAuth.revokeRefreshTokens(uid);
         } catch (FirebaseAuthException ex) {
             throw new ApiException(HttpStatus.BAD_GATEWAY, "Could not end the session on the server.", ex);
+        }
+    }
+
+    // ---------------------------------------------------------------- self-service (Increment 2)
+
+    /**
+     * Updates the caller's OWN profile. The uid always comes from the verified token (never from the
+     * request), so one user can never modify another user's profile. Email and role are not editable.
+     */
+    public UserProfile updateProfile(String uid, String fullName, String phoneNumber) {
+        requireExisting(uid);
+        String name = fullName.trim();
+        Map<String, Object> update = new HashMap<>();
+        update.put("fullName", name);
+        update.put("phoneNumber", phoneNumber.trim());
+        update.put("updatedAt", FieldValue.serverTimestamp());
+        await(users().document(uid).update(update));
+        try {
+            firebaseAuth.updateUser(new UserRecord.UpdateRequest(uid).setDisplayName(name));
+        } catch (FirebaseAuthException ex) {
+            // Firestore is the source of truth for the profile; the Auth display name is only cosmetic.
+            log.warn("Could not sync display name in Firebase Auth for {}: {}", uid, ex.getMessage());
+        }
+        return findByUid(uid).orElseThrow();
+    }
+
+    /**
+     * Changes the caller's password: verifies the current password, sets the new one (Firebase hashes
+     * it) and revokes every refresh token so the old credentials and old sessions stop working.
+     */
+    public void changePassword(String uid, String currentPassword, String newPassword) {
+        UserRecord record;
+        try {
+            record = firebaseAuth.getUser(uid);
+        } catch (FirebaseAuthException ex) {
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "Could not load your account. Please try again.", ex);
+        }
+        if (currentPassword.equals(newPassword)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "New password must be different from your current password.");
+        }
+        if (!passwordVerifier.isPasswordValid(record.getEmail(), currentPassword)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Current password is incorrect.");
+        }
+        try {
+            firebaseAuth.updateUser(new UserRecord.UpdateRequest(uid).setPassword(newPassword));
+            firebaseAuth.revokeRefreshTokens(uid);
+        } catch (FirebaseAuthException ex) {
+            log.error("Password change failed for {}: {}", uid, ex.getMessage());
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "Could not change the password. Please try again.", ex);
         }
     }
 
